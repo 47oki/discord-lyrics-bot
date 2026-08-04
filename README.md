@@ -1,13 +1,311 @@
-# Discord Lyrics Status
+# Discord Lyrics Status (DSC Lyrics)
 
-> A standalone Windows app that reads Spotify playback through Windows
-> SMTC, fetches synchronized lyrics from LRCLIB, and updates your
-> Discord custom status in real time.
+<p align="center">
+  <a href="#polski">Wersja polska</a> • <a href="#english">English version</a>
+</p>
+
+---
+
+<a name="polski"></a>
+# Wersja polska
+
+Samodzielna aplikacja dla systemu Windows, która odczytuje odtwarzanie ze Spotify za pomocą systemu Windows SMTC, pobiera zsynchronizowane teksty piosenek z LRCLIB i aktualizuje niestandardowy status na Discordzie w czasie rzeczywistym.
+
+* **Działa na:** Windows 10 / Windows 11
+* **Wymagania:** Node.js 18.17+ (lub spakowany plik `.exe` zawierający środowisko Node)
+* **Koszt:** $0 — brak bota Discord, brak zdalnego serwisu, brak telemetrii
+* **Bezpieczeństwo tokena:** przechowywany wyłącznie w `%APPDATA%\DiscordLyricsStatus\config.json`, nigdy nie jest logowany ani wysyłany nigdzie poza oficjalnym API Discorda.
+
+---
+
+## 🛠️ Poradnik krok po kroku: Jak uruchomić aplikację?
+
+### Co zrobić przed odpaleniem (Wymagania wstępne)
+1. **Zainstaluj Node.js** (wersja 18.17 lub nowsza) – pobierz go z oficjalnej strony [nodejs.org](https://nodejs.org/) i zainstaluj w systemie.
+2. **Pobierz kod źródłowy projektu** – możesz użyć polecenia `git clone <twoj-fork>` lub pobrać repozytorium jako archiwum ZIP i je rozpakować.
+3. Otwórz terminal (np. **PowerShell** lub Wiersz poleceń) i przejdź do katalogu z rozpakowanym projektem:
+   ```powershell
+   cd dsc-lyrics
+   ```
+
+### Jak odpalić aplikację (Instrukcja krok po kroku)
+1. **Zainstaluj zależności:** Wpisz w terminalu poniższe polecenie, aby pobrać wymagane pakiety Node.js:
+   ```powershell
+   npm install
+   ```
+2. **Zbuduj aplikację:** Skompiluj kod projektu do wersji produkcyjnej, uruchamiając:
+   ```powershell
+   npm run build
+   ```
+3. **Uruchom program:** Wpisz polecenie startowe:
+   ```powershell
+   npm start
+   ```
+4. **Konfiguracja tokena (Pierwsze uruchomienie):** 
+   * Przy pierwszym starcie aplikacja nie ma jeszcze zapisanego tokena, dlatego automatycznie otworzy w Twojej domyślnej przeglądarce prostą stronę konfiguracyjną.
+   * Zostaniesz poproszony o podanie tokena użytkownika Discord. 
+   * Po zatwierdzeniu token zostanie zweryfikowany i zapisany bezpiecznie w pliku `%APPDATA%\DiscordLyricsStatus\config.json`, a konfiguracja zostanie zamknięta.
+   * Aplikacja uruchomi się ponownie i od tego momentu będzie w czasie rzeczywistym śledzić odtwarzaną muzykę ze Spotify i aktualizować Twój status na Discordzie!
+
+---
+
+## Co to robi
+
+1. Monitoruje sesję **System Media Transport Controls** systemu Windows, którą publikuje Spotify. Brak odpytywania (pollingu) o stan transportu — aplikacja reaguje bezpośrednio na zdarzenia z systemu operacyjnego.
+2. Gdy utwór zaczyna grać, wyszukuje zsynchronizowane teksty w [LRCLIB](https://lrclib.net). Wyniki są zapisywane w pamięci podręcznej na dysku (TTL 24h, kluczowane według utworu, wykonawcy i czasu trwania) oraz w pamięci operacyjnej (RAM).
+3. Planuje przejścia między linijkami tekstu z dokładnością do milisekund, używając pojedynczego `setTimeout` odświeżanego z `Date.now()` przy każdym wywołaniu — brak opóźnień (driftu), brak odpytywania co milisekundę.
+4. Przesyła bieżącą linijkę do niestandardowego statusu na Discordzie poprzez endpoint `/users/@me/settings`, korzystając z kolejki sekwencyjnej uwzględniającej nagłówek `Retry-After` oraz deduplikującej identyczne aktualizacje.
+
+Jeśli tekst utworu jest niedostępny, aplikacja wyświetla format **Wykonawca — Tytuł** zamiast linijki tekstu. Jeśli Spotify zostanie zamknięte, status jest czyszczony. W przypadku odrzucenia tokena przez Discorda (błędy 401/403), automatycznie ponawiany jest proces konfiguracji w przeglądarce.
+
+---
+
+## Szybki start (dla deweloperów)
+
+```powershell
+git clone <your fork>
+cd dsc-lyrics
+npm install
+npm run build
+npm start
+```
+
+### Przydatne polecenia
+
+| Polecenie          | Działanie                                                             |
+| ------------------ | --------------------------------------------------------------------- |
+| `npm start`        | Uruchamia zbudowaną paczkę (`dist/main.cjs`).                         |
+| `npm run dev`      | Buduje przy zapisie + uruchamia ze `src/` z mapami źródłowymi (source maps). |
+| `npm run lint`     | Uruchamia ESLint dla `src/**/*.js`.                                   |
+| `npm run build`    | Tworzy pakiety ESM + CJS w katalogu `dist/`.                          |
+| `npm run verify`   | Sprawdzenia post-build: istnienie, rozmiary, `node --check`, test dymny. |
+| `npm run package`  | Tworzy jedno-plikowy plik `.exe` dla Windows za pomocą SEA w `release/`. |
+| `npm run clean`    | Usuwa `dist/`, `release/` oraz pamięć podręczną logów.                  |
+
+### Zmienne środowiskowe
+
+| Zmienna           | Działanie                                                             |
+| ----------------- | --------------------------------------------------------------------- |
+| `DLS_ADAPTER=mock`| Pomija całkowicie SMTC; używa wbudowanego adaptera mock (do testów / CI). |
+| `DLS_LOG=debug`   | Szczegółowe logowanie (verbose).                                      |
+| `APPDATA`         | Nadpisuje katalog konfiguracyjny dla danego użytkownika.              |
+
+---
+
+## Architektura
+
+```
+                  ┌──────────────────────────┐
+                  │  Windows SMTC (Spotify)  │
+                  └────────────┬─────────────┘
+                               │ zdarzenia
+                               ▼
+        ┌──────────────────────────────────────────────┐
+        │         src/scripts/smtc-bridge.ps1           │
+        │   (PowerShell 5 / 7, strumieniuje JSON na stdout) │
+        └────────────────────┬─────────────────────────┘
+                             │ JSON linii tekstu
+                             ▼
+              ┌───────────────────────────────┐
+              │ PowerShellBridgeAdapter       │   ← kontrakt wtyczki adaptera
+              └────────────┬──────────────────┘
+                           │ zdarzenia: attached, detached,
+                           │   playbackStatus, timeline,
+                           │   mediaProperties, error
+                           ▼
+                ┌──────────────────────────┐
+                │       SmtcService        │   ← deduplikacja zdarzeń, backoff,
+                └────────────┬─────────────┘     wykrywanie pauzy/wznawiania/przewijania
+                             │
+                  ┌──────────┴──────────┐
+                  │ trackchange         │ pozycja
+                  ▼                     ▼
+       ┌──────────────────┐   ┌──────────────────┐
+       │  LyricsProvider  │   │    Scheduler     │
+       │  LRCLIB + cache  │   │ bazujący na setTimeout │
+       └─────────┬────────┘   │ bez opóźnień     │
+                 │ linijki    └────────┬─────────┘
+                 ▼                    │ linijka
+       ┌──────────────────────────────────────┐
+       │            StateManager               │   ← pojedyncze źródło prawdy
+       └────────────────┬─────────────────────┘
+                        │ tekst statusu
+                        ▼
+              ┌────────────────────────┐
+              │     DiscordClient      │   ← kolejka sekwencyjna, Retry-After,
+              │   PATCH @me/settings   │     deduplikacja, ponowne połączenie, brak logowania tokena
+              └────────────────────────┘
+                        │ HTTPS
+                        ▼
+                ┌──────────────────┐
+                │  Discord API v9  │
+                └──────────────────┘
+```
+
+Każdy prostokąt odpowiada modułowi znajdującemu się w katalogu `src/`. Powiązania wstrzykiwania zależności (DI) znajdują się w `src/main.js` — w całym środowisku wykonawczym **nie ma globalnego stanu mutowalnego**.
+
+### Kluczowe moduły
+
+| Moduł                                             | Odpowiedzialność                                                                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.js`                                     | Wejście do procesu: instalacja obsługi błędów, blokada instancji, podpięcie DI, obsługa sygnałów systemowych.                                       |
+| `src/core/state-manager.js`                       | Orkiestrator. Reaguje na zdarzenia SMTC, inicjuje wyszukiwanie tekstów, steruje harmonogramem i klientem Discord.                                  |
+| `src/core/logger.js`                              | Ustrukturyzowany logger (JSON) z rotacją, ujściem do pliku, lustrzanym odbiciem na stderr oraz **maskowaniem tokenów** w każdym polu i wiadomości.     |
+| `src/core/config.js`                              | Magazyn konfiguracyjny z zapisem atomowym. Waliduje każde pole za pomocą dedykowanych walidatorów. Kwarantanna uszkodzonych plików. Migracja v1 → v2. |
+| `src/core/paths.js`                               | Rozwiązuje ścieżki `%APPDATA%`, `%LOCALAPPDATA%`, PowerShell oraz cmd.exe — nigdy nie ufa zmiennej PATH.                                             |
+| `src/core/browser.js`                             | Wieloplatformowe "otwórz URL w domyślnej przeglądarce" przez PowerShell w Windows, `open` na macOS, `xdg-open` na Linuxie. Nigdy nie wywołuje `spawn('cmd', …)`. |
+| `src/core/single-instance.js`                     | Blokada pojedynczej instancji za pomocą pliku blokady otwartego z flagą `wx`; odrzuca drugie uruchomienie.                                           |
+| `src/services/playback-adapter.js`                | Kontrakt (interfejs) adaptera.                                                                                                                       |
+| `src/services/smtc-service.js`                    | Tłumaczy zdarzenia adaptera na `trackchange` / `statechange` / `position`. Łączy duplikaty. Ponawia próby w przypadku błędów.                         |
+| `src/services/powershell-bridge-adapter.js`       | Uruchamia `smtc-bridge.ps1`, sparsowuje JSON linii, przekazuje dalej jako zdarzenia adaptera.                                                         |
+| `src/services/mock-adapter.js`                    | Skryptowany adapter testowy dla celów programistycznych bez użycia Spotify.                                                                         |
+| `src/scripts/smtc-bridge.ps1`                     | Strona PowerShell: odpytuje `GlobalSystemMediaTransportControlsSessionManager` i emituje JSON. Działa na PowerShell 5 oraz 7.                        |
+| `src/services/lrc-parser.js`                      | Parser LRC → `[{ms, text}]`. Obsługuje znaczniki BOM, CRLF, linie z wieloma znacznikami, ułamki milisekund, nieposortowane dane, linie wadliwe, znaczniki metadanych. |
+| `src/services/lyrics-provider.js`                 | Klient LRCLIB. Pamięć podręczna L1 (RAM) + L2 (Dysk) + TTL + wykładniczy backoff + anulowanie przez `AbortController`. Nigdy nie wyrzuca błędu przy nieudanym zapytaniu. |
+| `src/services/scheduler.js`                       | Pojedynczy `setTimeout` odświeżany z `Date.now()` przy każdym wywołaniu. Obsługuje pauzę, wznowienie, przewijanie, ponowne uruchomienie utworu i pętlę. |
+| `src/services/discord-client.js`                  | Sekwencyjna kolejka żądań PATCH. Respektuje `Retry-After`. Deduplikuje identyczne kolejne aktualizacje. Ponawia połączenie przy błędach sieci. Nigdy nie loguje tokena. |
+| `src/setup/setup-server.js`                       | Prosty serwer `http`: auto-port, token CSRF, walidacja formatu tokena, jednorazowa konsumpcja, otwiera przeglądarkę przez `core/browser.js`.             |
+
+---
+
+## Gwarancje niezawodności
+
+Środowisko wykonawcze opiera się na niezmiennikach, które kod egzekwuje w każdym miejscu:
+
+1. **Brak nieobsłużonych odrzuceń obietnic (unhandled promise rejections).** Główny program obsługi `unhandledRejection` wypisuje stos wywołań i kontynuuje działanie; `uncaughtException` wypisuje stos i kończy proces (system operacyjny lub menedżer uruchamiania decyduje o ponownym starcie).
+2. **Brak wycieków timerów.** Każdy `setTimeout` i `setInterval` jest parowany z `clearTimeout` / `clearInterval` w pasującej ścieżce `stop()`, a wszystkie posiadają wywołanie `.unref()`, dzięki czemu nigdy nie blokują zakończenia procesu.
+3. **Brak zduplikowanych aktualizacji statusu.** Klient Discorda porównuje każdą nową wartość z ostatnio wysłaną jeszcze przed dodaniem do kolejki.
+4. **Brak zduplikowanych harmonogramów tekstów.** Harmonogram to pojedyncza klasa z jednym timerem; w środowisku wykonawczym istnieje dokładnie jedna instancja.
+5. **Brak powtórzonych zapytań do LRCLIB.** Pamięć podręczna L1 + L2 dostawcy omija powtórzone wyszukiwania dla tej samej trójki `(track, artist, durationBucket)` w oknie TTL.
+6. **Brak porzuconych odczytów SMTC.** Proces pomostowy jest automatycznie restartowany w przypadku wyjścia, a `SmtcService` podpina się ponownie przy zdarzeniach `attached`.
+7. **Brak tokena w logach.** Logger redaguje każde pole, którego klucz zawiera `token` / `authorization`, oraz każdy ciąg znaków pasujący kształtem do tokena Discorda.
+
+---
+
+## Bezpieczeństwo
+
+* Token użytkownika Discord jest przechowywany jako czysty tekst w pliku `%APPDATA%\DiscordLyricsStatus\config.json`. Jest to celowe — token jest **tokenem użytkownika**, posiadającym uprawnienia tożsame z hasłem, i NIE MOŻE opuszczać maszyny. Nie logujemy go, nie przesyłamy nigdzie poza `discord.com/api/v9` i nie szyfrujemy (ponieważ Windows DPAPI powiązałoby instalację z profilem użytkownika i uniemożliwiło przenośność). Jeśli komputer zostanie skompromitowany na poziomie użytkownika, token i tak jest już zagrożony, niezależnie od szyfrowania.
+* Serwer konfiguracyjny nasłuchuje **wyłącznie** na adresie `127.0.0.1`. Nie można się do niego dostać z innej maszyny.
+* Wymagany jest token CSRF przy zapytaniu `/submit`.
+* Format tokena jest weryfikowany po stronie serwera przed zapisem; wadliwy token nigdy nie trafia do pliku konfiguracyjnego.
+* Wszystkie parametry zapytań LRCLIB są kodowane URL (URL-encoded); dane wejściowe użytkownika nigdy nie są bezpośrednio interpolowane do ścieżek.
+
+---
+
+## Kompatybilność z systemem Windows
+
+Środowisko wykonawcze było testowane na:
+
+* Windows 10 + PowerShell 5.1 (domyślny `powershell.exe`)
+* Windows 11 + PowerShell 7 (`pwsh.exe`)
+* Środowiskach z powłokami `cmd.exe` oraz PowerShell
+* Okrojonych środowiskach, w których w zmiennej `%PATH%` brakuje `cmd.exe` lub `powershell.exe`
+
+Aplikacja nigdy nie wywołuje `spawn('cmd', …)` bez uprzedniego odnalezienia konkretnej ścieżki. Plik `cmd.exe` wyszukiwany jest poprzez `ComSpec`, `WINDIR\System32\cmd.exe` oraz `WINDIR\Sysnative\cmd.exe`. PowerShell jest lokalizowany za pomocą jawnych ścieżek `Program Files\PowerShell \pwsh.exe` oraz `System32\WindowsPowerShell 1.0\powershell.exe`.
+
+Skrypt pomostowy PowerShell wykorzystuje przestrzeń nazw `[Windows.Media.Control.*]`, która jest częścią środowiska uruchomieniowego Universal Windows Platform dostępnego w każdej wspieranej wersji systemu Windows od wersji 1607. Aplikacja nie wymaga instalacji żadnych zewnętrznych modułów PowerShell.
+
+---
+
+## Proces budowania (Pipeline)
+
+* `scripts/build.mjs` generuje dwa pakiety w katalogu `dist/`:
+  * `dist/main.mjs` — ESM, używany bezpośrednio przez `node` w trakcie prac rozwojowych.
+  * `dist/main.cjs` — CommonJS, używany przez paker SEA oraz polecenie `npm start`.
+* Pakiet CommonJS zawiera plik `dist/package.json` z wpisem `"type": "commonjs"`, dzięki czemu Node paruje go poprawnie bez zmiany nazwy.
+* `scripts/package.mjs` wywołuje wbudowany w Node mechanizm Single Executable Application (`--experimental-sea-config`), wklejając pakiet do kopii `node.exe` przy użyciu biblioteki `postject`.
+* Jeśli SEA jest niedostępna na hoście Node, paker przełącza się na launcher przenośny (`discord-lyrics-status.exe` to `node.exe` + `main.cjs` + skrypt `.bat`). Działa to także bez zainstalowanego środowiska Node na komputerze docelowym, ponieważ `node.exe` jest dołączony w pakiecie.
+
+Czas zimnego startu zdominowany jest przez ładowanie przez system operacyjny pliku `node.exe`; sam pakiet ma rozmiar ~42 KiB i parsuje się w dziesiątkach milisekund.
+
+---
+
+## Konfiguracja — odnośnik
+
+Przechowywana w pliku `%APPDATA%\DiscordLyricsStatus\config.json`.
+
+```jsonc
+{
+  "version": 2,
+  "discord": {
+    "token": "<twoj_token_uzytkownika_discord>",
+    "userId": null
+  },
+  "display": {
+    "showArtist": true,
+    "maxLineLength": 120,
+    "separator": " — "
+  },
+  "lyrics": {
+    "provider": "lrclib",
+    "timeoutMs": 8000,
+    "maxRetries": 4,
+    "cacheTtlMs": 86400000
+  },
+  "scheduler": {
+    "tickMs": 100,
+    "lookaheadMs": 4000
+  },
+  "logging": {
+    "level": "info",
+    "verbose": false
+  },
+  "setup": { "lastPort": null }
+}
+```
+
+Magazyn konfiguracyjny waliduje każde pole podczas ładowania i zapisu. Nieznane klucze są po cichu odrzucane. Uszkodzone pliki są przenoszone do `config.corrupt-<timestamp>.json`, a środowisko uruchamia się z domyślnymi ustawieniami.
+
+---
+
+## Licencja
+
+MIT — zobacz plik `LICENSE`.
+
+---
+
+<a name="english"></a>
+# English version
+
+A standalone Windows app that reads Spotify playback through Windows
+SMTC, fetches synchronized lyrics from LRCLIB, and updates your
+Discord custom status in real time.
 
 * **Runs on:** Windows 10 / Windows 11
 * **Requires:** Node.js 18.17+ (or a packaged .exe that ships Node)
 * **Cost:** $0 — no Discord bot, no remote service, no telemetry
 * **Token safety:** stored only in `%APPDATA%\DiscordLyricsStatus\config.json`, never logged, never sent anywhere except Discord's API
+
+---
+
+## 🛠️ Step-by-Step Tutorial: How to Run the App
+
+### What to do before running (Prerequisites)
+1. **Install Node.js** (version 18.17 or higher) – download and install it from the official website [nodejs.org](https://nodejs.org/).
+2. **Download or clone the source code** – use `git clone <your-fork>` or download the repository as a ZIP archive and extract it.
+3. Open your terminal (e.g., **PowerShell** or Command Prompt) and navigate to the extracted project directory:
+   ```powershell
+   cd dsc-lyrics
+   ```
+
+### How to run the app (Step-by-step instructions)
+1. **Install dependencies:** Run the following command in your terminal to install the required Node.js packages:
+   ```powershell
+   npm install
+   ```
+2. **Build the application:** Compile the project code for production by running:
+   ```powershell
+   npm run build
+   ```
+3. **Start the program:** Run the startup command:
+   ```powershell
+   npm start
+   ```
+4. **Token Setup (First Launch):**
+   * On the first launch, since no token is configured yet, the app will automatically open a tiny setup page in your default browser.
+   * You will be asked to enter your Discord user token.
+   * Once submitted, the token will be validated and safely saved to `%APPDATA%\DiscordLyricsStatus\config.json`, and the setup server will close.
+   * The app will then start tracking Spotify playback and updating your custom status on Discord in real time!
 
 ---
 
@@ -41,14 +339,6 @@ npm install
 npm run build
 npm start
 ```
-
-The first time you launch the app it has no token configured, so it
-opens a tiny setup page in your default browser, asks for your Discord
-user token, validates the format, saves it to
-`%APPDATA%\DiscordLyricsStatus\config.json`, and exits setup. The app
-then starts tracking Spotify.
-
-Subsequent launches go straight into background mode.
 
 ### Useful commands
 
@@ -106,7 +396,7 @@ Subsequent launches go straight into background mode.
        └─────────┬────────┘   │ drift-free       │
                  │ lines      └────────┬─────────┘
                  ▼                    │ line
-       ┌──────────────────────────────────────┐
+       ┌────────────────----------------──────┐
        │            StateManager               │   ← single source of truth
        └────────────────┬─────────────────────┘
                         │ status text
@@ -211,8 +501,8 @@ The runtime is tested against:
 We never call `spawn('cmd', …)` without resolving a concrete path.
 We find `cmd.exe` via `ComSpec`, `WINDIR\System32\cmd.exe`, and
 `WINDIR\Sysnative\cmd.exe`. We find PowerShell via the explicit
-`Program Files\PowerShell\7\pwsh.exe` paths and
-`System32\WindowsPowerShell\v1.0\powershell.exe`.
+`Program Files\PowerShell \pwsh.exe` paths and
+`System32\WindowsPowerShell 1.0\powershell.exe`.
 
 The PowerShell bridge script uses `[Windows.Media.Control.*]` which
 is part of the Universal Windows Platform runtime available on every
