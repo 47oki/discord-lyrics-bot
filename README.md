@@ -9,6 +9,12 @@
 <a name="polski"></a>
 # Wersja polska
 
+## 🎬 Showcase
+
+<p align="center">
+  <img src="assets_for_readme_deletethis/showcase.gif" alt="Discord Lyrics Status Showcase" width="900">
+</p>
+
 Samodzielna aplikacja dla systemu Windows, która odczytuje odtwarzanie ze Spotify za pomocą systemu Windows SMTC, pobiera zsynchronizowane teksty piosenek z LRCLIB i aktualizuje niestandardowy status na Discordzie w czasie rzeczywistym.
 
 * **Działa na:** Windows 10 / Windows 11
@@ -266,6 +272,12 @@ MIT — zobacz plik `LICENSE`.
 
 <a name="english"></a>
 # English version
+
+## 🎬 Showcase
+
+<p align="center">
+  <img src="assets_for_readme_deletethis/showcase.gif" alt="Discord Lyrics Status Showcase" width="900">
+</p>
 
 A standalone Windows app that reads Spotify playback through Windows
 SMTC, fetches synchronized lyrics from LRCLIB, and updates your
