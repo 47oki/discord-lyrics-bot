@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+logs/
+*.log
+.env
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+coverage/
+.cache/
+
+# .NET
+**/bin/
+**/obj/

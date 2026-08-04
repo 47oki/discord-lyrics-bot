@@ -1,0 +1,47 @@
+{
+  "name": "discord-lyrics-status",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Read Spotify playback through Windows SMTC, fetch synchronized lyrics from LRCLIB, and update the user's Discord Custom Status in real time.",
+  "author": "Discord Lyrics Status",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "main": "dist/main.cjs",
+  "bin": {
+    "discord-lyrics-status": "dist/main.cjs"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
+    "start": "node dist/main.cjs",
+    "dev": "node scripts/build.mjs --watch & node --enable-source-maps src/main.js",
+    "lint": "eslint \"src/**/*.js\"",
+    "format": "prettier --write \"src/**/*.js\"",
+    "package": "npm run build && node scripts/package.mjs",
+    "verify": "node scripts/verify.mjs",
+    "clean": "node scripts/clean.mjs",
+    "test:smtc": "node scripts/test-smtc.cjs",
+    "test:smtc:mock": "node scripts/test-smtc.cjs --mock --duration 22",
+    "test:integration": "node scripts/test-integration.cjs",
+    "validate": "node scripts/validate.mjs"
+  },
+  "pkg": {
+    "scripts": [
+      "src/**/*.js",
+      "package.json"
+    ],
+    "assets": [],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "release"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "esbuild": "^0.21.5",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.2"
+  }
+}

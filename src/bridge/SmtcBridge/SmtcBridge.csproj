@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SmtcBridge</RootNamespace>
+    <AssemblyName>smtc-bridge</AssemblyName>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <UseWindowsForms>false</UseWindowsForms>
+    <UseWPF>false</UseWPF>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Bridge.cs" />
+  </ItemGroup>
+
+  <!--
+    SMTC (SystemMediaTransportControls) lives in the WinRT contract
+    "Windows.Media.Control". For .NET 8 we use Microsoft.Windows.CsWinRT,
+    which bundles the WinRT projection and (in 2.2+) ships the
+    necessary WinMD metadata directly so it does not need the
+    Windows SDK to be installed on the build host.
+
+    The 2.2.4 release is the last 2.x line that targets .NET 8 and
+    ships its own projection metadata.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.4" />
+  </ItemGroup>
+
+</Project>
