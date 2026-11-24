@@ -21,6 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const dist = join(root, 'dist');
 const watch = process.argv.includes('--watch');
+const HEARTBEAT_INTERVAL_MS = 20 * 60 * 1000;
 
 if (!existsSync(dist)) mkdirSync(dist, { recursive: true });
 
@@ -63,20 +64,30 @@ async function run() {
     console.log('[build] watching for changes…');
     return;
   }
+
   const start = Date.now();
-  await Promise.all([build(esmOptions), build(cjsOptions)]);
-  const ms = Date.now() - start;
-  const esmSize = statSync(join(dist, 'main.mjs')).size;
-  const cjsSize = statSync(join(dist, 'main.cjs')).size;
-  console.log(`[build] ok in ${ms}ms — esm ${(esmSize / 1024).toFixed(1)} KiB, cjs ${(cjsSize / 1024).toFixed(1)} KiB`);
-  // Mirror package.json for SEA / packaging metadata, and mark it as
-  // CommonJS so node parses main.cjs correctly.
-  copyFileSync(join(root, 'package.json'), join(dist, 'package.json'));
+  const heartbeat = setInterval(() => {
+    const elapsedMinutes = Math.floor((Date.now() - start) / 60000);
+    console.log(`[build] still building... (${elapsedMinutes} minutes elapsed)`);
+  }, HEARTBEAT_INTERVAL_MS);
+
   try {
-    const distPkg = JSON.parse(readFileSync(join(dist, 'package.json'), 'utf8'));
-    distPkg.type = 'commonjs';
-    writeFileSync(join(dist, 'package.json'), JSON.stringify(distPkg, null, 2));
-  } catch { /* best-effort */ }
+    await Promise.all([build(esmOptions), build(cjsOptions)]);
+    const ms = Date.now() - start;
+    const esmSize = statSync(join(dist, 'main.mjs')).size;
+    const cjsSize = statSync(join(dist, 'main.cjs')).size;
+    console.log(`[build] ok in ${ms}ms — esm ${(esmSize / 1024).toFixed(1)} KiB, cjs ${(cjsSize / 1024).toFixed(1)} KiB`);
+    // Mirror package.json for SEA / packaging metadata, and mark it as
+    // CommonJS so node parses main.cjs correctly.
+    copyFileSync(join(root, 'package.json'), join(dist, 'package.json'));
+    try {
+      const distPkg = JSON.parse(readFileSync(join(dist, 'package.json'), 'utf8'));
+      distPkg.type = 'commonjs';
+      writeFileSync(join(dist, 'package.json'), JSON.stringify(distPkg, null, 2));
+    } catch { /* best-effort */ }
+  } finally {
+    clearInterval(heartbeat);
+  }
 }
 
 run().catch((err) => {
